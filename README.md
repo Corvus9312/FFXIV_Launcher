@@ -14,9 +14,6 @@
 - **啟動與自動輸入**
   - 啟動官方啟動器後，自動定位視窗並依序輸入：信箱 / 密碼 / OTP
   - 不依賴 Tab 切換，改用相對座標點擊欄位（較穩定）
-- **系統匣（右下角通知區）**
-  - 點「啟動遊戲」後可縮到系統匣，不佔工作列
-  - 系統匣右鍵選單可「顯示主視窗 / 結束」
 - **系統設定**
   - 設定官方啟動器 `FFXIV_Launcher.exe` 路徑
 
@@ -43,17 +40,3 @@
 
 - 下載 Release 的 **onedir** 資料夾版
 - 執行：`FFXIV_Launcher.exe`
-
-## 建置（給開發者）
-
-本專案使用 `uv + PyInstaller` 進行 onedir 打包。
-
-在專案根目錄執行：
-
-```powershell
-.\build.ps1
-```
-
-輸出：
-
-- `.\dist\FFXIV_Launcher\FFXIV_Launcher.exe`
