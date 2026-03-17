@@ -3,6 +3,7 @@ import cv2
 import json
 import base64
 import main
+import numpy as np
 from urllib.parse import urlparse, parse_qs
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QFileDialog, QMessageBox)
 
@@ -42,7 +43,11 @@ class AccountPage(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, "選擇圖片", "", "Images (*.png *.jpg *.jpeg)")
         if not path: return
 
-        img = cv2.imread(path)
+        img = self._imread_unicode(path)
+        if img is None:
+            QMessageBox.warning(self, "錯誤", "無法讀取圖片檔案（可能是路徑含特殊字元、檔案不存在或損毀）。")
+            return
+
         detector = cv2.QRCodeDetector()
         data, _, _ = detector.detectAndDecode(img)
 
@@ -90,6 +95,22 @@ class AccountPage(QWidget):
         except:
             return None
         return None
+
+    def _imread_unicode(self, path: str):
+        """
+        Windows 上 cv2.imread 對含 Unicode/特殊字元路徑可能失敗；
+        改用 numpy fromfile + cv2.imdecode 以支援完整路徑。
+        """
+        try:
+            if not os.path.exists(path):
+                return None
+            buf = np.fromfile(path, dtype=np.uint8)
+            if buf.size == 0:
+                return None
+            img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+            return img
+        except Exception:
+            return None
 
     def save_data(self):
         acc = self.acc_input.text()

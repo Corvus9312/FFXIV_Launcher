@@ -45,3 +45,6 @@ data.db
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# --- Release Folder ---
+dist/
