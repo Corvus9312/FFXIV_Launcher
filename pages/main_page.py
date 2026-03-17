@@ -104,14 +104,14 @@ class MainPage(QWidget):
             return
 
         # 全自動：不要依賴 Tab（官方啟動器常不工作），改用相對座標點擊三個欄位後輸入。
-        time.sleep(0.5)
+        time.sleep(self.launch_delay)
         if not hwnd or not self._is_window(hwnd):
             hwnd = self._find_launcher_hwnd(target_title)
         if not hwnd:
             QMessageBox.warning(self, "錯誤", "找不到啟動器視窗控制代碼，無法自動輸入。")
             return
         self._focus_window(hwnd)
-        time.sleep(0.5)
+        time.sleep(self.launch_delay)
 
         # 全自動點擊座標（相對於視窗）：依「繁中服啟動器」版面校準的預設值。
         # 若日後啟動器 UI 改版，只需調整這四組 rx/ry。
@@ -185,9 +185,50 @@ class MainPage(QWidget):
             time.sleep(0.2)
 
         self._click_launcher(hwnd, rx, ry)
-        time.sleep(0.5)
+        time.sleep(self.ui_step_delay)
         pyautogui.hotkey('ctrl', 'a')
-        time.sleep(0.5)
-        # interval 也跟著放慢（避免啟動器吃字/焦點抖動）
-        pyautogui.typewrite(text, interval=0.05)
-        time.sleep(0.5)
+        time.sleep(self.ui_step_delay)
+        self._paste_text(text)
+        time.sleep(self.ui_step_delay)
+
+    def _paste_text(self, text: str):
+        """
+        用剪貼簿 + Ctrl+V 貼上，避免在中文輸入法狀態下逐字輸入被組字干擾。
+        若剪貼簿設定失敗，退回 typewrite。
+        """
+        try:
+            self._set_clipboard_text(text)
+            pyautogui.hotkey('ctrl', 'v')
+        except Exception:
+            pyautogui.typewrite(text, interval=0.02)
+
+    def _set_clipboard_text(self, text: str):
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+
+        CF_UNICODETEXT = 13
+        GMEM_MOVEABLE = 0x0002
+
+        if not user32.OpenClipboard(None):
+            raise OSError("OpenClipboard failed")
+        try:
+            user32.EmptyClipboard()
+
+            data = (text + "\0").encode("utf-16-le")
+            h_global = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(data))
+            if not h_global:
+                raise MemoryError("GlobalAlloc failed")
+
+            lp_global = kernel32.GlobalLock(h_global)
+            if not lp_global:
+                raise MemoryError("GlobalLock failed")
+            try:
+                ctypes.memmove(lp_global, data, len(data))
+            finally:
+                kernel32.GlobalUnlock(h_global)
+
+            if not user32.SetClipboardData(CF_UNICODETEXT, h_global):
+                raise OSError("SetClipboardData failed")
+            # 成功後所有權交給系統，不能釋放 h_global
+        finally:
+            user32.CloseClipboard()
