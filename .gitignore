@@ -1,0 +1,47 @@
+# --- Python 相關 ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- 虛擬環境 (Virtual Environments) ---
+# 我們通常不把整個虛擬環境推上去，別人下載後自己重建即可
+.venv/
+venv/
+ENV/
+env/
+
+# --- 開發工具 (Cursor / VS Code) ---
+.vscode/*
+# 如果你希望團隊共用 launch.json，可以註解掉下面這行
+!.vscode/launch.json
+.cursor/
+*.swp
+*.bak
+
+# --- 專案特定設定與敏感資料 ---
+# 重要：你的 FFXIV 帳號、密碼與密鑰通常存放在這裡，絕對不能推上去！
+config.json
+*.log
+data.db
+
+# --- 作業系統暫存檔 ---
+Thumbs.db
+desktop.ini
+.DS_Store
