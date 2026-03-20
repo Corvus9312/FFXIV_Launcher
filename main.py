@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import ctypes
-import traceback
 from ctypes import wintypes
 
 # 抑制 Qt 在 Windows 上設定 DPI 時的「存取被拒」警告（不影響功能）
@@ -12,7 +11,6 @@ import json
 from pages import main_page, setting_page, account_page
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QStackedWidget, QSystemTrayIcon, QMenu)
 from PyQt6.QtGui import QIcon, QAction
-from PyQt6.QtCore import QTimer
 
 APP_DATA_ROOT = os.path.join(os.environ['APPDATA'], 'FFXIV_Custom_Launcher')
 CONFIG_PATH = os.path.join(APP_DATA_ROOT, 'config.json')
@@ -21,24 +19,6 @@ if not os.path.exists(APP_DATA_ROOT):
     os.makedirs(APP_DATA_ROOT)
 
 _SINGLE_INSTANCE_MUTEX = None
-
-# region agent log
-def _debug_log(hypothesis_id: str, location: str, message: str, data=None, run_id: str = "pre-fix"):
-    try:
-        payload = {
-            "sessionId": "4db6fa",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data or {},
-            "timestamp": int(time.time() * 1000),
-        }
-        with open("debug-4db6fa.log", "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-# endregion
 
 def _bring_existing_window_to_front(window_title: str, timeout_s: float = 2.0) -> bool:
     """嘗試將已執行的同程式視窗喚到前景（Windows）。"""
@@ -109,46 +89,19 @@ def _bring_existing_window_to_front(window_title: str, timeout_s: float = 2.0) -
                     hwnd, wintypes.HWND(0), 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED
                 )
-            # region agent log
-            _debug_log("H12", "main.py:_bring_existing_window_to_front", "exstyle before/after normalize", {
-                "hwnd": int(hwnd),
-                "exBefore": ex_before,
-                "exAfter": ex_after,
-                "hadToolWindow": bool(ex_before & WS_EX_TOOLWINDOW),
-            })
-            # endregion
 
             # 視窗保持 minimized（而不是 hidden）時，SW_RESTORE 可正常喚回 Qt 內容
-            ok_show = ShowWindow(hwnd, SW_RESTORE)
+            ShowWindow(hwnd, SW_RESTORE)
             # 常見前景限制下的小技巧：先置頂再取消置頂，提升成功率
-            ok_top = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
-            ok_notop = SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
-            ok_fg = SetForegroundWindow(hwnd)
-            # region agent log
-            _debug_log("H11", "main.py:_bring_existing_window_to_front", "focus api returns", {
-                "hwnd": int(hwnd),
-                "ok_show": bool(ok_show),
-                "ok_top": bool(ok_top),
-                "ok_notop": bool(ok_notop),
-                "ok_fg": bool(ok_fg),
-            })
-            # endregion
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+            SetForegroundWindow(hwnd)
             try:
-                ok_update = UpdateWindow(hwnd)
-                # region agent log
-                _debug_log("H11", "main.py:_bring_existing_window_to_front", "UpdateWindow result", {
-                    "ok_update": bool(ok_update),
-                })
-                # endregion
+                UpdateWindow(hwnd)
             except Exception:
                 pass
             try:
-                ok_redraw = RedrawWindow(hwnd, None, None, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)
-                # region agent log
-                _debug_log("H11", "main.py:_bring_existing_window_to_front", "RedrawWindow result", {
-                    "ok_redraw": bool(ok_redraw),
-                })
-                # endregion
+                RedrawWindow(hwnd, None, None, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)
             except Exception:
                 pass
             return True
@@ -181,35 +134,13 @@ def _ensure_single_instance_or_focus_existing(app_id: str, window_title: str) ->
     ERROR_ALREADY_EXISTS = 183
     name = f"Global\\{app_id}"
     h_mutex = CreateMutexW(None, True, name)
-    # region agent log
-    _debug_log("H1", "main.py:_ensure_single_instance_or_focus_existing", "mutex created", {
-        "mutexName": name,
-        "hasHandle": bool(h_mutex),
-    })
-    # endregion
     if not h_mutex:
         # 建 mutex 失敗時，保守起見仍讓程式繼續跑
         return True
 
     last_error = int(GetLastError())
-    # region agent log
-    _debug_log("H1", "main.py:_ensure_single_instance_or_focus_existing", "mutex last error", {
-        "lastError": last_error,
-        "alreadyExistsCode": ERROR_ALREADY_EXISTS,
-    })
-    # endregion
     if last_error == ERROR_ALREADY_EXISTS:
-        # region agent log
-        _debug_log("H4", "main.py:_ensure_single_instance_or_focus_existing", "already exists branch (focus only)", {
-            "windowTitle": window_title,
-        })
-        # endregion
         focused = _bring_existing_window_to_front(window_title)
-        # region agent log
-        _debug_log("H4", "main.py:_ensure_single_instance_or_focus_existing", "focus result", {
-            "focused": bool(focused),
-        })
-        # endregion
         if not focused:
             # 找不到可喚回視窗時，不阻擋新實例啟動，避免看起來「程式打不開」。
             _SINGLE_INSTANCE_MUTEX = h_mutex
@@ -231,9 +162,6 @@ def _icon_path():
 # --- 主視窗管理 ---
 class LauncherApp(QMainWindow):
     def __init__(self):
-        # region agent log
-        _debug_log("H6", "main.py:LauncherApp.__init__", "constructor start")
-        # endregion
         super().__init__()
         self.setWindowTitle("FFXIV Corvus Launcher")
         icon_path = _icon_path()
@@ -255,9 +183,6 @@ class LauncherApp(QMainWindow):
 
         self.update_list()
         self._setup_tray()
-        # region agent log
-        _debug_log("H6", "main.py:LauncherApp.__init__", "constructor end")
-        # endregion
 
     def _setup_tray(self):
         """右下角系統匣圖示，點擊可再顯示主視窗"""
@@ -384,65 +309,19 @@ class LauncherApp(QMainWindow):
             self.main_page.launcher_path = ""
 
 if __name__ == "__main__":
-    # region agent log
-    _debug_log("H5", "main.py:__main__", "program entry", {"argv": sys.argv})
-    # endregion
     if not _ensure_single_instance_or_focus_existing(
         app_id="FFXIV Corvus Launcher_8f3a1c2e",
         window_title="FFXIV Corvus Launcher",
     ):
-        # region agent log
-        _debug_log("H5", "main.py:__main__", "exiting due to existing instance")
-        # endregion
         sys.exit(0)
 
-    try:
-        # region agent log
-        _debug_log("H5", "main.py:__main__", "creating QApplication")
-        # endregion
-        app = QApplication(sys.argv)
-        # region agent log
-        _debug_log("H5", "main.py:__main__", "QApplication created")
-        # endregion
-        # 必須設定，否則 Windows 系統匣不顯示
-        if not QSystemTrayIcon.isSystemTrayAvailable():
-            pass  # 若無系統匣則不建立 tray，主視窗仍正常
-        icon_path = _icon_path()
-        if os.path.isfile(icon_path):
-            app.setWindowIcon(QIcon(icon_path))
-        # region agent log
-        _debug_log("H5", "main.py:__main__", "creating LauncherApp")
-        # endregion
-        window = LauncherApp()
-        # region agent log
-        _debug_log("H5", "main.py:__main__", "LauncherApp created")
-        # endregion
-        # region agent log
-        _debug_log("H9", "main.py:__main__", "before window.show", {
-            "visible": bool(window.isVisible()),
-        })
-        # endregion
-        app.aboutToQuit.connect(lambda: _debug_log("H10", "main.py:__main__", "aboutToQuit emitted"))
-        window.show()
-        # region agent log
-        _debug_log("H9", "main.py:__main__", "after window.show", {
-            "visible": bool(window.isVisible()),
-            "minimized": bool(window.isMinimized()),
-        })
-        # endregion
-        # region agent log
-        _debug_log("H5", "main.py:__main__", "window shown; entering event loop")
-        # endregion
-        rc = app.exec()
-        # region agent log
-        _debug_log("H10", "main.py:__main__", "app.exec returned", {"rc": int(rc)})
-        # endregion
-        sys.exit(rc)
-    except Exception as e:
-        # region agent log
-        _debug_log("H5", "main.py:__main__", "fatal exception during startup", {
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-        })
-        # endregion
-        raise
+    app = QApplication(sys.argv)
+    # 必須設定，否則 Windows 系統匣不顯示
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        pass  # 若無系統匣則不建立 tray，主視窗仍正常
+    icon_path = _icon_path()
+    if os.path.isfile(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+    window = LauncherApp()
+    window.show()
+    sys.exit(app.exec())
